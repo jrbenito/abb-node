@@ -12,7 +12,7 @@
   "dependencies":
   [
     {
-      "name": "SPIFlash",
+      "name": "SPIFlashA",
       "authors": "Felix Rusu"
     }
   ]
