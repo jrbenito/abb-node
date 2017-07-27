@@ -95,6 +95,13 @@ void batteryStatusWorker() {   // return vcc voltage in millivolts
   return;
 }
 
+void blinkLedWorker() {
+    static bool ledStatus = false;
+	ledStatus = !ledStatus;
+
+	digitalWrite(LED, ledStatus);
+}
+
 void setup() {
     pinMode(LED, OUTPUT);
 
@@ -124,9 +131,13 @@ void setup() {
 
 	// Thread initialization
 	batteryStatus.onRun(batteryStatusWorker);
-	batteryStatus.setInterval(500);
+	batteryStatus.setInterval(BATTERY_STATUS_PERIOD);
+
+	blinkLed.onRun(blinkLedWorker);
+	blinkLed.setInterval(BLINKLED_PERIOD);
 
 	controll.add(&batteryStatus);
+	controll.add(&blinkLed);
 }
 
 void loop() {
