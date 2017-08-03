@@ -36,6 +36,7 @@
 #include <Thread.h>        // execution threads
 #include <ThreadController.h>
 #include <device.h>        // Computurist message format
+#include <abb-node.h>      // headers for system functions
 
 #define VERSION "PVI V0.1"
 //****************************************************************************************************************
@@ -56,6 +57,7 @@
 //*****************************************************************************************************************************
 #define ACK_TIME    30  // # of ms to wait for an ack
 #define ENCRYPTKEY "sampleEncryptKey" //(16 bytes of your choice - keep the same on all encrypted nodes)
+#define RETRIES 5
 //*****************************************************************************************************************************
 #define BLINKLED_PERIOD 1000
 #define BATTERY_STATUS_PERIOD 5000
@@ -130,24 +132,6 @@ void readRelay(Message *mess){
 
 void writeRelay(const Message *mess){
   digitalWrite(RELAY, mess->intVal);
-}
-
-float readVoltage() {   // return vcc voltage in Volts
-    long result;
-    float Vcc;
-
-    // Read 1.1V reference against AVcc
-    ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
-    delay(2);             // Wait for Vref to settle
-    ADCSRA |= _BV(ADSC);  // Convert
-    while (bit_is_set(ADCSRA,ADSC));
-    result = ADCL;
-    result |= ADCH<<8;
-    result = 1126400L / result; // Back-calculate in mV
-
-    batteryVcc = (float)result/1000.0; //Volts
-
-    return Vcc;
 }
 
 /******************************************/
@@ -279,11 +263,11 @@ void writeToggle(const Message *mess){
 }
 
 void sleep(){
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
-  sleep_enable();
-  sleep_bod_disable();
-  sleep_mode();
-  sleep_disable();
+//  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+//  sleep_enable();
+//  sleep_bod_disable();
+//  sleep_mode();
+//  sleep_disable();
 }
 
 void watchdogSetup(void){
