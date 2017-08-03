@@ -59,8 +59,6 @@
 #define ENCRYPTKEY "sampleEncryptKey" //(16 bytes of your choice - keep the same on all encrypted nodes)
 #define RETRIES 5
 //*****************************************************************************************************************************
-#define BLINKLED_PERIOD 1000
-#define BATTERY_STATUS_PERIOD 5000
 
 // Onboard LED and flash chip select pins
 #ifdef __AVR_ATmega1284P__
@@ -68,7 +66,7 @@
   #define FLASH_SS      23 // and FLASH SS on D23
 #else
   #define LED           9 // Miniwirless have LEDs on D9
-  #define FLASH_SS      5 // and FLASH SS on D8
+  #define FLASH_SS      5 // and FLASH SS on D5
 #endif
 
 
@@ -115,23 +113,32 @@ Device verDev(3, false);
 Device voltDev(4, false, readVoltage);
 Device ackDev(5, false, readACK, writeACK);
 Device toggleDev(6, false, readToggle, writeToggle);
+Device ledDev(16, false, readLED, writeLED);
 Device relayDev(17, false, readRelay, writeRelay);
 
 //ThreadController controll = ThreadController();
 //Thread blinkLed = Thread();
 static Device devices[] = {uptimeDev, txIntDev, rssiDev, verDev,
-                    voltDev, ackDev, toggleDev, relayDev};
+                    voltDev, ackDev, toggleDev, ledDev, relayDev};
 
 /*******************************************
 put non-system read/write functions here
 ********************************************/
 
-void readRelay(Message *mess){
-  digitalRead(RELAY) ? mess->intVal = 1 : mess->intVal = 0;
+void readLED(Message *mess) {
+    digitalRead(LED) ? mess->intVal = 1 : mess->intVal = 0;
 }
 
-void writeRelay(const Message *mess){
-  digitalWrite(RELAY, mess->intVal);
+void writeLED(const Message *mess) {
+    digitalWrite(LED, mess->intVal);
+}
+
+void readRelay(Message *mess) {
+    digitalRead(RELAY) ? mess->intVal = 1 : mess->intVal = 0;
+}
+
+void writeRelay(const Message *mess) {
+    digitalWrite(RELAY, mess->intVal);
 }
 
 /******************************************/
@@ -148,6 +155,7 @@ void setup() {
 
     // Initialize I/O
     pinMode(LED, OUTPUT);     // ensures LED is output
+    digitalWrite(LED, LOW);   // LED off
     pinMode(RELAY, OUTPUT);   // relay pin (signal inverter to stop)
     digitalWrite(RELAY, LOW); // not active
 
@@ -195,16 +203,10 @@ void loop() {
 	// picked up when a GATEWAY is trying hard to reach this node for a new sketch wireless upload
 	if (radio.receiveDone())
 	{
-		Serial.print("Got [");
-		Serial.print(radio.SENDERID);
-		Serial.print(':');
-		Serial.print(radio.DATALEN);
-		Serial.print("] > ");
-		for (byte i = 0; i < radio.DATALEN; i++)
-			Serial.print((char)radio.DATA[i], HEX);
-		Serial.println();
 		CheckForWirelessHEX(radio, flash, false, 9);
-		Serial.println();
+
+		// if we got here, the message was not a FOTA handshake
+
 	}
 }
 

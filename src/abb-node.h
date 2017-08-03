@@ -13,6 +13,8 @@ void watchdogSetup(void);
 void buttonHandler();
 
 // devices in the node
+void readLED(Message *mess);
+void writeLED(const Message *mess);
 void readRelay(Message *mess);
 void writeRelay(const Message *mess);
 
