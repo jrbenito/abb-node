@@ -10,11 +10,12 @@ typedef struct {					// Radio packet format
 } Message;
 
 class Device{
+    private:
+	const int id;
+	bool setTX;
 	void (*readPointer)(Message *);
 	void (*writePointer)(const Message *);
 	public:
-	const int id;
-	bool setTX;
 	Device (int x, bool tx) : id(x), setTX(tx) { readPointer = &dummyRead; writePointer = &dummyWrite; }
 	Device (int x, bool tx, void (*ptr)(Message *)) : id(x), setTX(tx), readPointer(ptr) { writePointer = &dummyWrite; }
 	Device (int x, bool tx, void (*ptr)(Message *), void (*ptr2)(const Message *)) : id(x), setTX(tx), readPointer(ptr), writePointer(ptr2) {}
