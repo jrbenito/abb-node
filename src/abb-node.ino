@@ -26,6 +26,7 @@
 // Please maintain this license information along with authorship
 // and copyright notices in any redistribution of this code
 /////////////////////////////////////////////////////////////////////////////////////
+#include <avr/wdt.h>
 #include <RFM69.h>         //get it here: https://github.com/lowpowerlab/RFM69
 #include <RFM69_ATC.h>     //get it here: https://github.com/lowpowerlab/RFM69
 #include <RFM69_OTA.h>     //get it here: https://github.com/lowpowerlab/RFM69
@@ -34,7 +35,9 @@
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
 #include <Thread.h>        // execution threads
 #include <ThreadController.h>
+#include <device.h>        // Computurist message format
 
+#define VERSION "PVI V0.1"
 //****************************************************************************************************************
 //**** IMPORTANT RADIO SETTINGS - YOU MUST CHANGE/CONFIGURE TO MATCH YOUR HARDWARE TRANSCEIVER CONFIGURATION! ****
 //****************************************************************************************************************
@@ -47,7 +50,7 @@
 #define IS_RFM69HW_HCW  //uncomment only for RFM69HW/HCW! Leave out if you have RFM69W/CW!
 //*****************************************************************************************************************************
 #define ENABLE_ATC    //comment out this line to disable AUTO TRANSMISSION CONTROL
-#define ATC_RSSI      -75
+#define ATC_RSSI      -85
 //*****************************************************************************************************************************
 //#define BR_300KBPS             //run radio at max rate of 300kbps!
 //*****************************************************************************************************************************
@@ -66,47 +69,107 @@
   #define FLASH_SS      5 // and FLASH SS on D8
 #endif
 
+
 #ifdef ENABLE_ATC
   RFM69_ATC radio;
 #else
   RFM69 radio;
 #endif
 
+/**************************************
+device settings
+**************************************/
+
+#define BTN_INT 1	//interrupt number
+#define BTN_PIN 3   //button pin
+#define RELAY 2     //relay pin
+
 SPIFlash flash(FLASH_SS, 0x12018); //12018 for 128Mbit Spanion flash
 
-ThreadController controll = ThreadController();
-int batteryVcc = 0;
-Thread batteryStatus = Thread();
-Thread blinkLed = Thread();
+/**************************************
+  global variables
+  **************************************/
+int     TXinterval = 20;            // periodic transmission interval in seconds
+bool    setACK = false;             // send ACK message on 'SET' request
+bool    toggle = false;
+bool    updatesSent = false;
 
-void batteryStatusWorker() {   // return vcc voltage in millivolts
-  long result;
-  // Read 1.1V reference against AVcc
-  ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
-  delay(2);             // Wait for Vref to settle
-  ADCSRA |= _BV(ADSC);  // Convert
-  while (bit_is_set(ADCSRA,ADSC));
-  result = ADCL;
-  result |= ADCH<<8;
-  result = 1126400L / result; // Back-calculate in mV
+volatile bool btnPressed = false;
+volatile long lastBtnPress = -1;        // timestamp last buttonpress
+volatile long wdtCounter = 0;
 
-  batteryVcc = (int)result;
+const Message DEFAULT_MSG = {NODEID, 0, 0, 0, 0, VERSION};
 
-  return;
+/**************************************
+  configure devices
+  **************************************/
+
+//Device name(devID, tx_periodically, read_function, optional_write_function)
+
+Device uptimeDev(0, false, readUptime);
+Device txIntDev(1, false, readTXInt, writeTXInt);
+Device rssiDev(2, false, readRSSI);
+Device verDev(3, false);
+Device voltDev(4, false, readVoltage);
+Device ackDev(5, false, readACK, writeACK);
+Device toggleDev(6, false, readToggle, writeToggle);
+Device relayDev(17, false, readRelay, writeRelay);
+
+//ThreadController controll = ThreadController();
+//Thread blinkLed = Thread();
+static Device devices[] = {uptimeDev, txIntDev, rssiDev, verDev,
+                    voltDev, ackDev, toggleDev, relayDev};
+
+/*******************************************
+put non-system read/write functions here
+********************************************/
+
+void readRelay(Message *mess){
+  digitalRead(RELAY) ? mess->intVal = 1 : mess->intVal = 0;
 }
 
-void blinkLedWorker() {
-    static bool ledStatus = false;
-	ledStatus = !ledStatus;
-
-	digitalWrite(LED, ledStatus);
+void writeRelay(const Message *mess){
+  digitalWrite(RELAY, mess->intVal);
 }
+
+float readVoltage() {   // return vcc voltage in Volts
+    long result;
+    float Vcc;
+
+    // Read 1.1V reference against AVcc
+    ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+    delay(2);             // Wait for Vref to settle
+    ADCSRA |= _BV(ADSC);  // Convert
+    while (bit_is_set(ADCSRA,ADSC));
+    result = ADCL;
+    result |= ADCH<<8;
+    result = 1126400L / result; // Back-calculate in mV
+
+    batteryVcc = (float)result/1000.0; //Volts
+
+    return Vcc;
+}
+
+/******************************************/
 
 void setup() {
-    pinMode(LED, OUTPUT);
+	//disable watchdog timer during setup
+	wdt_disable();
+
+	//set all pins as input with pullups, floating pins can waste power
+	DDRD &= B00100011;       // set Arduino pins 2 to 7 as inputs, leaves 0 & 1 (RX & TX) and 5 as is
+	DDRB &= B11111110;        // set pins 8 to input, leave others alone since they are used by SPI and OSC
+	PORTD |= B11011100;      // enable pullups on pins 2 to 7, leave pins 0 and 1 alone
+	PORTB |= B00000001;      // enable pullups on pin 8 leave others alone
+
+    // Initialize I/O
+    pinMode(LED, OUTPUT);     // ensures LED is output
+    pinMode(RELAY, OUTPUT);   // relay pin (signal inverter to stop)
+    digitalWrite(RELAY, LOW); // not active
 
 	// Radio setup
 	radio.initialize(FREQUENCY, NODEID, NETWORKID);
+	radio.rcCalibration();
 	radio.encrypt(ENCRYPTKEY);
 #ifdef FREQUENCY_EXACT
 	radio.setFrequency(FREQUENCY_EXACT);
@@ -129,20 +192,19 @@ void setup() {
 
 	flash.initialize();
 
-	// Thread initialization
-	batteryStatus.onRun(batteryStatusWorker);
-	batteryStatus.setInterval(BATTERY_STATUS_PERIOD);
+	//configure watchdog as 1s counter for uptime and to wake from sleep 
+	watchdogSetup();	
 
-	blinkLed.onRun(blinkLedWorker);
-	blinkLed.setInterval(BLINKLED_PERIOD);
+	//setup interrupt for button
+	//attachInterrupt(BTN_INT, buttonHandler, LOW);
 
-	controll.add(&batteryStatus);
-	controll.add(&blinkLed);
+	//send wakeup message
+	Message wakeup = DEFAULT_MSG;
+	wakeup.devID = 99;
+	txRadio(&wakeup);
 }
 
 void loop() {
-    // run threads
-    controll.run();
 
 	// Check for existing RF data, potentially for a new sketch wireless upload
 	// For this to work this check has to be done often enough to be
@@ -160,4 +222,87 @@ void loop() {
 		CheckForWirelessHEX(radio, flash, false, 9);
 		Serial.println();
 	}
+}
+
+void txRadio(Message * mess){
+  Serial.print(" message ");
+  Serial.print(mess->devID);
+  Serial.println(" sent...");
+  if (!radio.sendWithRetry(GATEWAYID, mess, sizeof(*mess), RETRIES, ACK_TIME)){
+    Serial.println("No connection...");
+  }
+}
+
+void readUptime(Message *mess){
+  mess->intVal = wdtCounter / 60;
+}
+
+void readTXInt(Message *mess){
+  mess->intVal = TXinterval;
+}
+
+void writeTXInt(const Message *mess){
+  TXinterval = mess->intVal;
+  if (TXinterval <10 && TXinterval !=0) TXinterval = 10;	// minimum interval is 10 seconds
+}
+
+void readRSSI(Message *mess){
+  mess->intVal = radio.RSSI;
+}
+
+void readVoltage(Message *mess){
+  long result;					// Read 1.1V reference against AVcc
+  ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+  delay(2);					// Wait for Vref to settle
+  ADCSRA |= _BV(ADSC);				// Convert
+  while (bit_is_set(ADCSRA,ADSC));
+  result = ADCL;
+  result |= ADCH<<8;
+  result = 1126400L / result; 			// Back-calculate in mV
+  mess->fltVal = float(result/1000.0);		// Voltage in Volt (float)
+}
+
+void readACK(Message *mess){
+  setACK ? mess->intVal = 1 : mess->intVal = 0;
+}
+
+void writeACK(const Message *mess){
+  mess->intVal ? setACK = true: setACK = false;
+}
+
+void readToggle(Message *mess){
+  toggle ? mess->intVal = 1 : mess->intVal = 0;
+}
+
+void writeToggle(const Message *mess){
+  mess->intVal ? toggle = true: toggle = false;
+}
+
+void sleep(){
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable();
+  sleep_bod_disable();
+  sleep_mode();
+  sleep_disable();
+}
+
+void watchdogSetup(void){
+  cli();
+  wdt_reset();
+  WDTCSR |=(1<<WDCE) | (1<<WDE);
+  //set for 1s
+  WDTCSR = (1 <<WDIE) |(1<<WDP2) | (1<<WDP1);
+  sei();
+}
+
+void buttonHandler(){
+  if (lastBtnPress != wdtCounter){
+    lastBtnPress = wdtCounter;
+    btnPressed = true;
+  }
+}
+
+ISR(WDT_vect) // Watchdog timer interrupt.
+{
+  wdtCounter++;
 }
