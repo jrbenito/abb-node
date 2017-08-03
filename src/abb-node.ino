@@ -197,17 +197,105 @@ void setup() {
 }
 
 void loop() {
+    Message reply = DEFAULT_MSG;
 
 	// Check for existing RF data, potentially for a new sketch wireless upload
 	// For this to work this check has to be done often enough to be
 	// picked up when a GATEWAY is trying hard to reach this node for a new sketch wireless upload
-	if (radio.receiveDone())
-	{
+	if (radio.receiveDone()) {
+
 		CheckForWirelessHEX(radio, flash, false, 9);
 
 		// if we got here, the message was not a FOTA handshake
+		if (radio.DATALEN != sizeof(Message)) {
+			Serial.println("INVALID PACKET");
+		} else {
+			Message mess = *(Message*)radio.DATA;
+			if (radio.ACKRequested()) {
+				Serial.println("sending ack");
+				radio.sendACK();
+			} else {
+				Serial.println("ack not requested");
+			}
+			bool match = false;
 
+			//check if message is for any devices registered on node
+			for (int i = 0; i < sizeof(devices) / sizeof(Device); i++) {
+				if (mess.devID == devices[i].id) {
+					match = true;
+					reply.devID = devices[i].id;
+					//write for cmd 0
+					if (mess.cmd == 0) {
+						devices[i].write(&mess);
+#ifdef DEBUG
+						Serial.print("writing node ");
+						Serial.print(mess.nodeID);
+						Serial.print(" dev ");
+						Serial.println(mess.devID);
+#endif
+						if (setACK) {
+							Serial.println(reply.devID);
+							devices[i].read(&reply);
+							txRadio(&reply);
+						}
+						//read for cmd 1
+					} else if (mess.cmd == 1) {
+						devices[i].read(&reply);
+#ifdef DEBUG
+						Serial.print("reading node ");
+						Serial.print(reply.nodeID);
+						Serial.print(" dev ");
+						Serial.println(reply.devID);
+#endif
+						txRadio(&reply);
+					}
+				}
+			}
+			//invalid device id in message
+			if (!match) {
+				reply.devID = 92;
+				txRadio(&reply);
+			}
+		}
 	}
+
+    //check if any devices needs to transmit periodic info
+    if (!updatesSent && wdtCounter % TXinterval == 0) {
+        Serial.println("Sending periodic updates");
+        for (int i = 0; i <= sizeof(devices) / sizeof(Device); i++) {
+            if (devices[i].setTX) {
+                reply = DEFAULT_MSG;
+                reply.devID = devices[i].id;
+                devices[i].read(&reply);
+                txRadio(&reply);
+            }
+        }
+        updatesSent = true;
+    } else if(wdtCounter % TXinterval != 0) {
+        updatesSent = false;
+    }
+
+    //if button was pressed and enabled toggle the relay
+    if (btnPressed && toggle) {
+        digitalWrite(RELAY, !digitalRead(RELAY));
+        reply = DEFAULT_MSG;
+        reply.devID = 17;
+        relayDev.read(&reply);
+        txRadio(&reply);
+    }
+    btnPressed = false;
+
+    //Disabling sleep for now, was making comms too unreliable
+    /*
+#ifdef DEBUG
+    //make sure serial tx is done before sleeping
+    Serial.flush();
+    while ((UCSR0A & _BV (TXC0)) == 0){}
+#endif
+     */
+
+    //put chip to sleep until button is pressed, packet is RX, or watchdog timer fires
+    //sleep();
 }
 
 void txRadio(Message * mess){
