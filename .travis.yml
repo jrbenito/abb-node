@@ -36,6 +36,11 @@ cache:
 install:
     - pip install -U platformio
 
+    # Libraries for the project
+    #
+    # http://platformio.org/lib/show/339/SPIFlashA
+    - platformio lib -g install 339
+
 script:
     - platformio run
 
