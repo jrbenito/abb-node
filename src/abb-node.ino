@@ -220,10 +220,10 @@ void loop() {
 			bool match = false;
 
 			//check if message is for any devices registered on node
-			for (int i = 0; i < sizeof(devices) / sizeof(Device); i++) {
-				if (mess.devID == devices[i].id) {
+			for (unsigned int i = 0; i < sizeof(devices) / sizeof(Device); i++) {
+				if (mess.devID == devices[i].getId()) {
 					match = true;
-					reply.devID = devices[i].id;
+					reply.devID = devices[i].getId();
 					//write for cmd 0
 					if (mess.cmd == 0) {
 						devices[i].write(&mess);
@@ -262,10 +262,10 @@ void loop() {
     //check if any devices needs to transmit periodic info
     if (!updatesSent && wdtCounter % TXinterval == 0) {
         Serial.println("Sending periodic updates");
-        for (int i = 0; i <= sizeof(devices) / sizeof(Device); i++) {
-            if (devices[i].setTX) {
+        for (unsigned int i = 0; i <= sizeof(devices) / sizeof(Device); i++) {
+            if (devices[i].getSetTX()) {
                 reply = DEFAULT_MSG;
-                reply.devID = devices[i].id;
+                reply.devID = devices[i].getId();
                 devices[i].read(&reply);
                 txRadio(&reply);
             }

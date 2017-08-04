@@ -23,4 +23,7 @@ class Device{
 	void write(const Message *mess) { writePointer(mess);}
 	static void dummyRead(Message *mess) {}
 	static void dummyWrite(const Message *mess) {}
+
+	const int getId() { return this->id; }
+	bool getSetTX() { return this->setTX; }
 };
