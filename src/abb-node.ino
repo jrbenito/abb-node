@@ -35,6 +35,7 @@
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
 #include <Thread.h>        // execution threads
 #include <ThreadController.h>
+#include <ABBAurora.h>     // Aurora protocol
 #include <device.h>        // Computurist message format
 #include <abb-node.h>      // headers for system functions
 
@@ -80,9 +81,8 @@
 device settings
 **************************************/
 
-#define BTN_INT 1	//interrupt number
-#define BTN_PIN 3   //button pin
-#define RELAY 2     //relay pin
+#define INVADDR 2  //RS485 Inverter Address
+#define RELAY 2    //relay pin
 
 SPIFlash flash(FLASH_SS, 0x12018); //12018 for 128Mbit Spanion flash
 
@@ -94,11 +94,10 @@ bool    setACK = false;             // send ACK message on 'SET' request
 bool    toggle = false;
 bool    updatesSent = false;
 
-volatile bool btnPressed = false;
-volatile long lastBtnPress = -1;        // timestamp last buttonpress
 volatile long wdtCounter = 0;
 
 const Message DEFAULT_MSG = {NODEID, 0, 0, 0, 0, VERSION};
+ABBAurora inverter = ABBAurora(INVADDR);
 
 /**************************************
   configure devices
@@ -112,14 +111,13 @@ Device rssiDev(2, false, readRSSI);
 Device verDev(3, false);
 Device voltDev(4, false, readVoltage);
 Device ackDev(5, false, readACK, writeACK);
-Device toggleDev(6, false, readToggle, writeToggle);
 Device ledDev(16, false, readLED, writeLED);
 Device relayDev(17, false, readRelay, writeRelay);
 
 //ThreadController controll = ThreadController();
 //Thread blinkLed = Thread();
 static Device devices[] = {uptimeDev, txIntDev, rssiDev, verDev,
-                    voltDev, ackDev, toggleDev, ledDev, relayDev};
+                    voltDev, ackDev, ledDev, relayDev};
 
 /*******************************************
 put non-system read/write functions here
@@ -210,7 +208,9 @@ void loop() {
 		if (radio.DATALEN != sizeof(Message)) {
 			Serial.println("INVALID PACKET");
 		} else {
+		    // TODO: switch cast with copy for security and portability
 			Message mess = *(Message*)radio.DATA;
+
 			if (radio.ACKRequested()) {
 				Serial.println("sending ack");
 				radio.sendACK();
@@ -274,28 +274,6 @@ void loop() {
     } else if(wdtCounter % TXinterval != 0) {
         updatesSent = false;
     }
-
-    //if button was pressed and enabled toggle the relay
-    if (btnPressed && toggle) {
-        digitalWrite(RELAY, !digitalRead(RELAY));
-        reply = DEFAULT_MSG;
-        reply.devID = 17;
-        relayDev.read(&reply);
-        txRadio(&reply);
-    }
-    btnPressed = false;
-
-    //Disabling sleep for now, was making comms too unreliable
-    /*
-#ifdef DEBUG
-    //make sure serial tx is done before sleeping
-    Serial.flush();
-    while ((UCSR0A & _BV (TXC0)) == 0){}
-#endif
-     */
-
-    //put chip to sleep until button is pressed, packet is RX, or watchdog timer fires
-    //sleep();
 }
 
 void txRadio(Message * mess){
@@ -344,14 +322,6 @@ void writeACK(const Message *mess){
   mess->intVal ? setACK = true: setACK = false;
 }
 
-void readToggle(Message *mess){
-  toggle ? mess->intVal = 1 : mess->intVal = 0;
-}
-
-void writeToggle(const Message *mess){
-  mess->intVal ? toggle = true: toggle = false;
-}
-
 void sleep(){
 //  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 //  sleep_enable();
@@ -367,13 +337,6 @@ void watchdogSetup(void){
   //set for 1s
   WDTCSR = (1 <<WDIE) |(1<<WDP2) | (1<<WDP1);
   sei();
-}
-
-void buttonHandler(){
-  if (lastBtnPress != wdtCounter){
-    lastBtnPress = wdtCounter;
-    btnPressed = true;
-  }
 }
 
 ISR(WDT_vect) // Watchdog timer interrupt.
