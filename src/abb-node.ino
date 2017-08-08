@@ -82,6 +82,7 @@ device settings
 **************************************/
 
 #define INVADDR 2  //RS485 Inverter Address
+#define INVTXRX 4  //RS485 TX/RX control pin 
 #define RELAY 2    //relay pin
 
 SPIFlash flash(FLASH_SS, 0x12018); //12018 for 128Mbit Spanion flash
@@ -97,7 +98,7 @@ bool    updatesSent = false;
 volatile long wdtCounter = 0;
 
 const Message DEFAULT_MSG = {NODEID, 0, 0, 0, 0, VERSION};
-ABBAurora inverter = ABBAurora(INVADDR);
+ABBAurora inverter = ABBAurora(INVADDR, INVTXRX);
 
 /**************************************
   configure devices
