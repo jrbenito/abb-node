@@ -99,6 +99,7 @@ volatile long wdtCounter = 0;
 
 const Message DEFAULT_MSG = {NODEID, 0, 0, 0, 0, VERSION};
 ABBAurora inverter = ABBAurora(INVADDR, INVTXRX);
+InverterRegisters invReg;
 
 /**************************************
   configure devices
@@ -114,15 +115,102 @@ Device voltDev(4, false, readVoltage);
 Device ackDev(5, false, readACK, writeACK);
 Device ledDev(16, false, readLED, writeLED);
 Device relayDev(17, false, readRelay, writeRelay);
+Device gridVDev(48, true, readGV);
+Device gridPDev(49, true, readGP);
+Device gridFDev(50, true, readGF);
+Device pwrInDev(56, true, readPwrIn);
+Device inveTDev(57, true, readInvTemp);
+Device boosTDev(58, true, readBooTemp);
+Device inptVDev(54, true, readInputV);
+Device inptADev(55, true, readInputA);
+Device gridAvgDev(51, true, readGridAvg);
+Device ppkDev(52, true, readPPK);
+Device ppkDayDev(53, true, readPPKDay);
+Device heatsinkTDev(59, true, readHeatsinkT);
 
 //ThreadController controll = ThreadController();
 //Thread blinkLed = Thread();
 static Device devices[] = {uptimeDev, txIntDev, rssiDev, verDev,
-                    voltDev, ackDev, ledDev, relayDev};
+                    voltDev, ackDev, ledDev, relayDev, gridVDev,
+                    gridPDev, gridFDev, pwrInDev, inveTDev, boosTDev,
+                    inptVDev, inptADev, gridAvgDev, ppkDev, ppkDayDev,
+                    heatsinkTDev
+};
 
 /*******************************************
 put non-system read/write functions here
 ********************************************/
+void readHeatsinkT(Message *mess) {
+    if (inverter.ReadDSP(heatsinkTemp, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readPPKDay(Message *mess) {
+    if (inverter.ReadDSP(powerPeakDay, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readPPK(Message *mess) {
+    if (inverter.ReadDSP(powerPeak, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readGridAvg(Message *mess) {
+    if (inverter.ReadDSP(gridVoltageAvg, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readGV(Message *mess) {
+    if (inverter.ReadDSP(gridVoltage, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readGP(Message *mess) {
+    if (inverter.ReadDSP(gridPower, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readGF(Message *mess) {
+    if (inverter.ReadDSP(gridFrequency, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readPwrIn(Message *mess) {
+    if (inverter.ReadDSP(powerIn, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readInvTemp(Message *mess) {
+    if (inverter.ReadDSP(inverterTemp, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readBooTemp(Message *mess) {
+    if (inverter.ReadDSP(boosterTemp, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readInputV(Message *mess) {
+    if (inverter.ReadDSP(inputVoltage, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
+
+void readInputA(Message *mess) {
+    if (inverter.ReadDSP(inputCurrent, 0)) {
+        mess->fltVal = inverter.DSP.Valore;
+    }
+}
 
 void readLED(Message *mess) {
     digitalRead(LED) ? mess->intVal = 1 : mess->intVal = 0;
