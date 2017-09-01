@@ -33,8 +33,8 @@
 #include <SPIFlashA.h>      //get it here: https://github.com/lowpowerlab/spiflash
 #define SPIFlash SPIFlashA
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
-#include <Thread.h>        // execution threads
-#include <ThreadController.h>
+//#include <Thread.h>        // execution threads
+//#include <ThreadController.h>
 #include <ABBAurora.h>     // Aurora protocol
 #include <device.h>        // Computurist message format
 #include <abb-node.h>      // headers for system functions
@@ -77,12 +77,22 @@
   RFM69 radio;
 #endif
 
+
+#ifndef DEBUG
+  #define DebugSer(a)
+  #define DebugSerln(a)
+  #define DebugSerbg(a)
+#else
+  #define DebugSer(a) Serial.print(a)
+  #define DebugSerln(a) Serial.println(a)
+  #define DebugSerbg(a) Serial.begin(a)
+#endif
 /**************************************
 device settings
 **************************************/
 
 #define INVADDR 2  //RS485 Inverter Address
-#define INVTXRX 4  //RS485 TX/RX control pin 
+#define INVTXRX 6  //RS485 TX/RX control pin 
 #define RELAY 2    //relay pin
 
 SPIFlash flash(FLASH_SS, 0x12018); //12018 for 128Mbit Spanion flash
@@ -90,7 +100,7 @@ SPIFlash flash(FLASH_SS, 0x12018); //12018 for 128Mbit Spanion flash
 /**************************************
   global variables
   **************************************/
-int     TXinterval = 20;            // periodic transmission interval in seconds
+int     TXinterval = 60;            // periodic transmission interval in seconds
 bool    setACK = false;             // send ACK message on 'SET' request
 bool    toggle = false;
 bool    updatesSent = false;
@@ -107,11 +117,11 @@ InverterRegisters invReg;
 
 //Device name(devID, tx_periodically, read_function, optional_write_function)
 
-Device uptimeDev(0, false, readUptime);
+Device uptimeDev(0, true, readUptime);
 Device txIntDev(1, false, readTXInt, writeTXInt);
 Device rssiDev(2, false, readRSSI);
-Device verDev(3, false);
-Device voltDev(4, false, readVoltage);
+Device verDev(3, true);
+Device voltDev(4, true, readVoltage);
 Device ackDev(5, false, readACK, writeACK);
 Device ledDev(16, false, readLED, writeLED);
 Device relayDev(17, false, readRelay, writeRelay);
@@ -234,17 +244,17 @@ void setup() {
 	//disable watchdog timer during setup
 	wdt_disable();
 
-	//set all pins as input with pullups, floating pins can waste power
-	DDRD &= B00100011;       // set Arduino pins 2 to 7 as inputs, leaves 0 & 1 (RX & TX) and 5 as is
-	DDRB &= B11111110;        // set pins 8 to input, leave others alone since they are used by SPI and OSC
-	PORTD |= B11011100;      // enable pullups on pins 2 to 7, leave pins 0 and 1 alone
-	PORTB |= B00000001;      // enable pullups on pin 8 leave others alone
-
     // Initialize I/O
     pinMode(LED, OUTPUT);     // ensures LED is output
     digitalWrite(LED, LOW);   // LED off
-    pinMode(RELAY, OUTPUT);   // relay pin (signal inverter to stop)
-    digitalWrite(RELAY, LOW); // not active
+    //pinMode(RELAY, OUTPUT);   // relay pin (signal inverter to stop)
+    //digitalWrite(RELAY, LOW); // not active
+    
+    // RS485 Serial Init
+    pinMode(INVTXRX, OUTPUT);
+    digitalWrite(SSerialTxControl, RS485Receive); // init tranceiver
+    Serial.setTimeout(500);
+    Serial.begin(19200);
 
 	// Radio setup
 	radio.initialize(FREQUENCY, NODEID, NETWORKID);
@@ -295,16 +305,16 @@ void loop() {
 
 		// if we got here, the message was not a FOTA handshake
 		if (radio.DATALEN != sizeof(Message)) {
-			Serial.println("INVALID PACKET");
+			DebugSerln("INVALID PACKET");
 		} else {
 		    // TODO: switch cast with copy for security and portability
 			Message mess = *(Message*)radio.DATA;
 
 			if (radio.ACKRequested()) {
-				Serial.println("sending ack");
+				DebugSerln("sending ack");
 				radio.sendACK();
 			} else {
-				Serial.println("ack not requested");
+				DebugSerln("ack not requested");
 			}
 			bool match = false;
 
@@ -317,13 +327,13 @@ void loop() {
 					if (mess.cmd == 0) {
 						devices[i].write(&mess);
 #ifdef DEBUG
-						Serial.print("writing node ");
-						Serial.print(mess.nodeID);
-						Serial.print(" dev ");
-						Serial.println(mess.devID);
+						DebugSer("writing node ");
+						DebugSer(mess.nodeID);
+						DebugSer(" dev ");
+						DebugSerln(mess.devID);
 #endif
 						if (setACK) {
-							Serial.println(reply.devID);
+							DebugSerln(reply.devID);
 							devices[i].read(&reply);
 							txRadio(&reply);
 						}
@@ -331,10 +341,10 @@ void loop() {
 					} else if (mess.cmd == 1) {
 						devices[i].read(&reply);
 #ifdef DEBUG
-						Serial.print("reading node ");
-						Serial.print(reply.nodeID);
-						Serial.print(" dev ");
-						Serial.println(reply.devID);
+						DebugSer("reading node ");
+						DebugSer(reply.nodeID);
+						DebugSer(" dev ");
+						DebugSerln(reply.devID);
 #endif
 						txRadio(&reply);
 					}
@@ -350,7 +360,7 @@ void loop() {
 
     //check if any devices needs to transmit periodic info
     if (!updatesSent && wdtCounter % TXinterval == 0) {
-        Serial.println("Sending periodic updates");
+        DebugSerln("Sending periodic updates");
         for (unsigned int i = 0; i <= sizeof(devices) / sizeof(Device); i++) {
             if (devices[i].getSetTX()) {
                 reply = DEFAULT_MSG;
@@ -366,11 +376,11 @@ void loop() {
 }
 
 void txRadio(Message * mess){
-  Serial.print(" message ");
-  Serial.print(mess->devID);
-  Serial.println(" sent...");
+  DebugSer(" message ");
+  DebugSer(mess->devID);
+  DebugSerln(" sent...");
   if (!radio.sendWithRetry(GATEWAYID, mess, sizeof(*mess), RETRIES, ACK_TIME)){
-    Serial.println("No connection...");
+    DebugSerln("No connection...");
   }
 }
 
