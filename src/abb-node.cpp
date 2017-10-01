@@ -130,46 +130,23 @@ Device gridPDev(49, true, readGP);
 Device gridFDev(50, true, readGF);
 Device pwrInDev(56, true, readPwrIn);
 Device inveTDev(57, true, readInvTemp);
-Device boosTDev(58, true, readBooTemp);
 Device inptVDev(54, true, readInputV);
 Device inptADev(55, true, readInputA);
-Device gridAvgDev(51, true, readGridAvg);
-Device ppkDev(52, true, readPPK);
 Device ppkDayDev(53, true, readPPKDay);
-Device heatsinkTDev(59, true, readHeatsinkT);
 
 //ThreadController controll = ThreadController();
 //Thread blinkLed = Thread();
 static Device devices[] = {uptimeDev, txIntDev, rssiDev, verDev,
                     voltDev, ackDev, ledDev, relayDev, gridVDev,
-                    gridPDev, gridFDev, pwrInDev, inveTDev, boosTDev,
-                    inptVDev, inptADev, gridAvgDev, ppkDev, ppkDayDev,
-                    heatsinkTDev
+                    gridPDev, gridFDev, pwrInDev, inveTDev, 
+                    inptVDev, inptADev, ppkDayDev
 };
 
 /*******************************************
 put non-system read/write functions here
 ********************************************/
-void readHeatsinkT(Message *mess) {
-    if (inverter.ReadDSP(heatsinkTemp, 0)) {
-        mess->fltVal = inverter.DSP.Valore;
-    }
-}
-
 void readPPKDay(Message *mess) {
     if (inverter.ReadDSP(powerPeakDay, 0)) {
-        mess->fltVal = inverter.DSP.Valore;
-    }
-}
-
-void readPPK(Message *mess) {
-    if (inverter.ReadDSP(powerPeak, 0)) {
-        mess->fltVal = inverter.DSP.Valore;
-    }
-}
-
-void readGridAvg(Message *mess) {
-    if (inverter.ReadDSP(gridVoltageAvg, 0)) {
         mess->fltVal = inverter.DSP.Valore;
     }
 }
@@ -200,12 +177,6 @@ void readPwrIn(Message *mess) {
 
 void readInvTemp(Message *mess) {
     if (inverter.ReadDSP(inverterTemp, 0)) {
-        mess->fltVal = inverter.DSP.Valore;
-    }
-}
-
-void readBooTemp(Message *mess) {
-    if (inverter.ReadDSP(boosterTemp, 0)) {
         mess->fltVal = inverter.DSP.Valore;
     }
 }
