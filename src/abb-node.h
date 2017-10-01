@@ -55,3 +55,6 @@ void readInvTemp(Message *mess);
 void readInputV(Message *mess);
 void readInputA(Message *mess);
 void readPPKDay(Message *mess);
+void readEneDay(Message *mess);
+void readEneLif(Message *mess);
+void readEnePar(Message *mess);

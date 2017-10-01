@@ -133,18 +133,40 @@ Device inveTDev(57, true, readInvTemp);
 Device inptVDev(54, true, readInputV);
 Device inptADev(55, true, readInputA);
 Device ppkDayDev(53, true, readPPKDay);
+Device eneDayDev(64, true, readEneDay);
+Device eneLifDev(65, true, readEneLif);
+Device eneParDev(66, true, readEnePar);
 
 //ThreadController controll = ThreadController();
 //Thread blinkLed = Thread();
 static Device devices[] = {uptimeDev, txIntDev, rssiDev, verDev,
                     voltDev, ackDev, ledDev, relayDev, gridVDev,
                     gridPDev, gridFDev, pwrInDev, inveTDev, 
-                    inptVDev, inptADev, ppkDayDev
+                    inptVDev, inptADev, ppkDayDev, eneDayDev,
+                    eneLifDev, eneParDev
 };
 
 /*******************************************
 put non-system read/write functions here
 ********************************************/
+void readEneDay(Message *mess) {
+    if (inverter.ReadCumulatedEnergy(0)) {
+        mess->intVal = (long) inverter.CumulatedEnergy.Energia;
+    }
+}
+
+void readEneLif(Message *mess) {
+    if (inverter.ReadCumulatedEnergy(5)) {
+        mess->intVal = (long) inverter.CumulatedEnergy.Energia;
+    }
+}
+
+void readEnePar(Message *mess) {
+    if (inverter.ReadCumulatedEnergy(6)) {
+        mess->intVal = (long) inverter.CumulatedEnergy.Energia;
+    }
+}
+
 void readPPKDay(Message *mess) {
     if (inverter.ReadDSP(powerPeakDay, 0)) {
         mess->fltVal = inverter.DSP.Valore;
